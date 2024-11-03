@@ -39,6 +39,21 @@
             border: 1px solid #eee;
             margin-bottom: 8px;
             border-radius: 4px;
+            position: relative;
+        }
+
+        .delete-icon {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            cursor: pointer;
+            color: #ff4444;
+            padding: 4px;
+            border-radius: 3px;
+        }
+
+        .delete-icon:hover {
+            background-color: #ffebee;
         }
 
         .tag {
@@ -74,6 +89,17 @@
             background: #fff;
             border-bottom: none;
         }
+
+        .prompt-text {
+            margin-right: 20px;
+            /* Make space for delete icon */
+        }
+
+        .copy-hint {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
     </style>
 </head>
 
@@ -101,7 +127,6 @@
 
     <div id="addTab" style="display: none;">
         <div class="prompt-form">
-            <input type="text" id="promptTitle" placeholder="Prompt Title">
             <textarea id="promptText" rows="4" placeholder="Prompt Text"></textarea>
             <select id="promptModality">
                 <option value="general">General</option>
