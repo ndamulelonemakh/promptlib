@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PromptLib v0</title>
+    <style>
+        body {
+            width: 400px;
+            padding: 15px;
+            font-family: Arial, sans-serif;
+        }
+
+        .search-container {
+            margin-bottom: 15px;
+        }
+
+        #searchInput {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .prompt-form {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .prompt-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .prompt-item {
+            padding: 10px;
+            border: 1px solid #eee;
+            margin-bottom: 8px;
+            border-radius: 4px;
+        }
+
+        .tag {
+            display: inline-block;
+            background: #e1e1e1;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 2px;
+            font-size: 12px;
+        }
+
+        select,
+        input,
+        textarea {
+            width: 100%;
+            padding: 6px;
+            margin-bottom: 8px;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            background: #f5f5f5;
+        }
+
+        .tab.active {
+            background: #fff;
+            border-bottom: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>PromptLib v0</h2>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="search">Search</div>
+        <div class="tab" data-tab="add">Add New</div>
+    </div>
+
+    <div id="searchTab">
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search prompts...">
+            <select id="modalityFilter">
+                <option value="">All Modalities</option>
+                <option value="general">General</option>
+                <option value="coding">Coding</option>
+                <option value="writing">Writing</option>
+                <option value="analysis">Analysis</option>
+            </select>
+        </div>
+        <div id="promptList" class="prompt-list"></div>
+    </div>
+
+    <div id="addTab" style="display: none;">
+        <div class="prompt-form">
+            <input type="text" id="promptTitle" placeholder="Prompt Title">
+            <textarea id="promptText" rows="4" placeholder="Prompt Text"></textarea>
+            <select id="promptModality">
+                <option value="general">General</option>
+                <option value="coding">Coding</option>
+                <option value="writing">Writing</option>
+                <option value="analysis">Analysis</option>
+            </select>
+            <input type="text" id="promptTags" placeholder="Tags (comma separated)">
+            <button id="savePrompt">Save Prompt</button>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
