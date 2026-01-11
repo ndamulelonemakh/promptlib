@@ -22,7 +22,8 @@
         toast: null,
         deleteModal: null,
         cancelDelete: null,
-        confirmDelete: null
+        confirmDelete: null,
+        versionBadge: null
     };
 
     // State
@@ -38,6 +39,7 @@
         bindEvents();
         loadPrompts();
         focusSearchInput();
+        loadVersion();
     }
 
     /**
@@ -59,6 +61,20 @@
         elements.deleteModal = document.getElementById('deleteModal');
         elements.cancelDelete = document.getElementById('cancelDelete');
         elements.confirmDelete = document.getElementById('confirmDelete');
+        elements.versionBadge = document.getElementById('versionBadge');
+    }
+
+    /**
+     * Load version from manifest.json
+     */
+    function loadVersion() {
+        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
+            const manifest = chrome.runtime.getManifest();
+            elements.versionBadge.textContent = 'v' + manifest.version;
+        } else {
+            // Fallback for non-extension context (testing)
+            elements.versionBadge.textContent = 'v1.0.2';
+        }
     }
 
     /**
@@ -263,8 +279,8 @@
             return;
         }
 
-        // Sort by most recent first
-        prompts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        // Sort by most recent first (pre-parse timestamps for efficiency)
+        prompts.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 
         prompts.forEach((prompt, index) => {
             const promptElement = createPromptElement(prompt, index);
@@ -377,11 +393,18 @@
 
     /**
      * Escape HTML to prevent XSS
+     * Uses character replacement map for efficiency
      */
+    const HTML_ESCAPE_MAP = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    };
+
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(/[&<>"']/g, char => HTML_ESCAPE_MAP[char]);
     }
 
     // Initialize when DOM is ready
