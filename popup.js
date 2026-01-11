@@ -1,36 +1,141 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            if (tab.dataset.tab === 'search') {
-                document.getElementById('searchTab').style.display = 'block';
-                document.getElementById('addTab').style.display = 'none';
-                loadPrompts();
-            } else {
-                document.getElementById('searchTab').style.display = 'none';
-                document.getElementById('addTab').style.display = 'block';
-            }
-        });
-    });
+/**
+ * PromptLib - Modern Prompt Management Extension
+ * Enterprise-grade UI interactions with smooth animations
+ */
 
-    // Save prompt
-    document.getElementById('savePrompt').addEventListener('click', function() {
-        const promptText = document.getElementById('promptText').value.trim();
+(function() {
+    'use strict';
+
+    // DOM Elements cache
+    const elements = {
+        tabs: null,
+        searchTab: null,
+        addTab: null,
+        searchInput: null,
+        modalityFilter: null,
+        promptList: null,
+        promptForm: null,
+        promptText: null,
+        promptModality: null,
+        promptTags: null,
+        savePrompt: null,
+        toast: null,
+        deleteModal: null,
+        cancelDelete: null,
+        confirmDelete: null
+    };
+
+    // State
+    let pendingDeleteId = null;
+    let searchDebounceTimer = null;
+    const SEARCH_DEBOUNCE_MS = 150;
+
+    /**
+     * Initialize the application
+     */
+    function init() {
+        cacheElements();
+        bindEvents();
+        loadPrompts();
+        focusSearchInput();
+    }
+
+    /**
+     * Cache DOM elements for performance
+     */
+    function cacheElements() {
+        elements.tabs = document.querySelectorAll('.tab');
+        elements.searchTab = document.getElementById('searchTab');
+        elements.addTab = document.getElementById('addTab');
+        elements.searchInput = document.getElementById('searchInput');
+        elements.modalityFilter = document.getElementById('modalityFilter');
+        elements.promptList = document.getElementById('promptList');
+        elements.promptForm = document.getElementById('promptForm');
+        elements.promptText = document.getElementById('promptText');
+        elements.promptModality = document.getElementById('promptModality');
+        elements.promptTags = document.getElementById('promptTags');
+        elements.savePrompt = document.getElementById('savePrompt');
+        elements.toast = document.getElementById('toast');
+        elements.deleteModal = document.getElementById('deleteModal');
+        elements.cancelDelete = document.getElementById('cancelDelete');
+        elements.confirmDelete = document.getElementById('confirmDelete');
+    }
+
+    /**
+     * Bind all event listeners
+     */
+    function bindEvents() {
+        // Tab switching
+        elements.tabs.forEach(tab => {
+            tab.addEventListener('click', handleTabClick);
+        });
+
+        // Form submission
+        elements.promptForm.addEventListener('submit', handleFormSubmit);
+
+        // Search with debounce
+        elements.searchInput.addEventListener('input', handleSearchInput);
+        elements.modalityFilter.addEventListener('change', loadPrompts);
+
+        // Delete modal
+        elements.cancelDelete.addEventListener('click', hideDeleteModal);
+        elements.confirmDelete.addEventListener('click', handleConfirmDelete);
+        elements.deleteModal.addEventListener('click', handleModalOverlayClick);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', handleKeyDown);
+    }
+
+    /**
+     * Handle tab click
+     */
+    function handleTabClick(e) {
+        const tab = e.currentTarget;
+        const targetTab = tab.dataset.tab;
+
+        // Update tab states
+        elements.tabs.forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+        });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+
+        // Update content visibility
+        if (targetTab === 'search') {
+            elements.searchTab.classList.add('active');
+            elements.addTab.classList.remove('active');
+            loadPrompts();
+            requestAnimationFrame(() => elements.searchInput.focus());
+        } else {
+            elements.searchTab.classList.remove('active');
+            elements.addTab.classList.add('active');
+            requestAnimationFrame(() => elements.promptText.focus());
+        }
+    }
+
+    /**
+     * Handle form submission
+     */
+    function handleFormSubmit(e) {
+        e.preventDefault();
+        
+        const promptText = elements.promptText.value.trim();
         if (!promptText) {
-            alert('Please enter a prompt');
+            showToast('Please enter a prompt', 'error');
+            elements.promptText.focus();
             return;
         }
 
         const prompt = {
             text: promptText,
-            modality: document.getElementById('promptModality').value,
-            tags: document.getElementById('promptTags').value.split(',')
+            modality: elements.promptModality.value,
+            tags: elements.promptTags.value
+                .split(',')
                 .map(tag => tag.trim())
-                .filter(tag => tag), // Remove empty tags
+                .filter(tag => tag),
             timestamp: new Date().toISOString(),
-            id: Date.now().toString() // Unique ID for deletion
+            id: Date.now().toString()
         };
 
         chrome.storage.sync.get(['prompts'], function(result) {
@@ -38,95 +143,247 @@ document.addEventListener('DOMContentLoaded', function() {
             prompts.push(prompt);
             chrome.storage.sync.set({ prompts: prompts }, function() {
                 // Clear form
-                document.getElementById('promptText').value = '';
-                document.getElementById('promptTags').value = '';
-                // Switch to search tab and refresh
-                document.querySelector('[data-tab="search"]').click();
+                elements.promptText.value = '';
+                elements.promptTags.value = '';
+                
+                // Show success and switch to search
+                showToast('Prompt saved successfully');
+                
+                // Switch to search tab
+                const searchTabBtn = document.querySelector('[data-tab="search"]');
+                searchTabBtn.click();
             });
         });
-    });
+    }
 
-    // Search functionality
-    document.getElementById('searchInput').addEventListener('input', loadPrompts);
-    document.getElementById('modalityFilter').addEventListener('change', loadPrompts);
+    /**
+     * Handle search input with debounce
+     */
+    function handleSearchInput() {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(loadPrompts, SEARCH_DEBOUNCE_MS);
+    }
 
-    // Initial load
-    loadPrompts();
-});
+    /**
+     * Handle keyboard shortcuts
+     */
+    function handleKeyDown(e) {
+        // Close modal on Escape
+        if (e.key === 'Escape' && elements.deleteModal.classList.contains('show')) {
+            hideDeleteModal();
+        }
+    }
 
-function deletePrompt(id) {
-    chrome.storage.sync.get(['prompts'], function(result) {
-        const prompts = result.prompts || [];
-        const updatedPrompts = prompts.filter(p => p.id !== id);
-        chrome.storage.sync.set({ prompts: updatedPrompts }, function() {
-            loadPrompts();
+    /**
+     * Handle click on modal overlay
+     */
+    function handleModalOverlayClick(e) {
+        if (e.target === elements.deleteModal) {
+            hideDeleteModal();
+        }
+    }
+
+    /**
+     * Show delete confirmation modal
+     */
+    function showDeleteModal(id) {
+        pendingDeleteId = id;
+        elements.deleteModal.classList.add('show');
+        elements.confirmDelete.focus();
+    }
+
+    /**
+     * Hide delete confirmation modal
+     */
+    function hideDeleteModal() {
+        elements.deleteModal.classList.remove('show');
+        pendingDeleteId = null;
+    }
+
+    /**
+     * Handle confirm delete
+     */
+    function handleConfirmDelete() {
+        if (pendingDeleteId) {
+            deletePrompt(pendingDeleteId);
+            hideDeleteModal();
+        }
+    }
+
+    /**
+     * Delete a prompt
+     */
+    function deletePrompt(id) {
+        chrome.storage.sync.get(['prompts'], function(result) {
+            const prompts = result.prompts || [];
+            const updatedPrompts = prompts.filter(p => p.id !== id);
+            chrome.storage.sync.set({ prompts: updatedPrompts }, function() {
+                showToast('Prompt deleted');
+                loadPrompts();
+            });
         });
-    });
-}
+    }
 
-function loadPrompts() {
-    const searchText = document.getElementById('searchInput').value.toLowerCase();
-    const modalityFilter = document.getElementById('modalityFilter').value;
+    /**
+     * Load and display prompts
+     */
+    function loadPrompts() {
+        const searchText = elements.searchInput.value.toLowerCase();
+        const modalityFilter = elements.modalityFilter.value;
 
-    chrome.storage.sync.get(['prompts'], function(result) {
-        const prompts = result.prompts || [];
-        const filteredPrompts = prompts.filter(prompt => {
-            const matchesSearch = prompt.text.toLowerCase().includes(searchText) ||
-                                prompt.tags.some(tag => tag.toLowerCase().includes(searchText));
-            const matchesModality = !modalityFilter || prompt.modality === modalityFilter;
-            return matchesSearch && matchesModality;
+        chrome.storage.sync.get(['prompts'], function(result) {
+            const prompts = result.prompts || [];
+            const filteredPrompts = prompts.filter(prompt => {
+                const matchesSearch = prompt.text.toLowerCase().includes(searchText) ||
+                    prompt.tags.some(tag => tag.toLowerCase().includes(searchText));
+                const matchesModality = !modalityFilter || prompt.modality === modalityFilter;
+                return matchesSearch && matchesModality;
+            });
+
+            renderPromptList(filteredPrompts);
         });
+    }
 
-        const promptList = document.getElementById('promptList');
-        promptList.innerHTML = '';
+    /**
+     * Render the prompt list
+     */
+    function renderPromptList(prompts) {
+        elements.promptList.innerHTML = '';
 
-        if (filteredPrompts.length === 0) {
-            promptList.innerHTML = '<div style="text-align: center; color: #666;">No prompts found</div>';
+        if (prompts.length === 0) {
+            elements.promptList.innerHTML = `
+                <div class="empty-state">
+                    <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m5.231 13.481L15 17.25m-4.5-15H5.625c-.621 0-1.125.504-1.125 1.125v16.5c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9zm3.75 11.625a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                    </svg>
+                    <p class="empty-state-title">No prompts found</p>
+                    <p class="empty-state-text">Try a different search or add a new prompt</p>
+                </div>
+            `;
             return;
         }
 
-        filteredPrompts.forEach(prompt => {
-            const promptElement = document.createElement('div');
-            promptElement.className = 'prompt-item';
-            promptElement.innerHTML = `
-                <div class="delete-icon" data-id="${prompt.id}">x</div>
-                <div class="prompt-text">
-                    ${prompt.text}
-                </div>
-                <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                    Modality: ${prompt.modality}
-                </div>
-                <div style="margin: 5px 0;">
-                    ${prompt.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-                </div>
-                <div class="copy-hint">Click to copy</div>
-            `;
+        // Sort by most recent first
+        prompts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-            // Delete handler
-            promptElement.querySelector('.delete-icon').addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent copying when clicking delete
-                if (confirm('Delete this prompt?')) {
-                    deletePrompt(prompt.id);
-                }
-            });
-
-            // Copy handler
-            promptElement.addEventListener('click', function(e) {
-                if (!e.target.classList.contains('delete-icon')) {
-                    navigator.clipboard.writeText(prompt.text);
-                    // Visual feedback for copy
-                    const originalBackground = promptElement.style.background;
-                    promptElement.style.background = '#e8f5e9';
-                    setTimeout(() => {
-                        promptElement.style.background = originalBackground;
-                    }, 200);
-                    // change copy-hint to "Copied!"
-                    const copyHint = promptElement.querySelector('.copy-hint');
-                    copyHint.textContent = 'Copied!';
-                }
-            });
-
-            promptList.appendChild(promptElement);
+        prompts.forEach((prompt, index) => {
+            const promptElement = createPromptElement(prompt, index);
+            elements.promptList.appendChild(promptElement);
         });
-    });
-}
+    }
+
+    /**
+     * Create a prompt element
+     */
+    function createPromptElement(prompt, index) {
+        const div = document.createElement('div');
+        div.className = 'prompt-item';
+        div.setAttribute('role', 'listitem');
+        div.setAttribute('tabindex', '0');
+        div.style.animationDelay = `${index * 30}ms`;
+
+        const tagsHtml = prompt.tags.length > 0
+            ? `<div class="tags-container">${prompt.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</div>`
+            : '';
+
+        div.innerHTML = `
+            <button class="delete-btn" data-id="${prompt.id}" aria-label="Delete prompt" title="Delete">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <div class="prompt-text">${escapeHtml(prompt.text)}</div>
+            <div class="prompt-meta">
+                <span class="prompt-modality">${escapeHtml(prompt.modality)}</span>
+            </div>
+            ${tagsHtml}
+            <span class="copy-hint">Click to copy</span>
+        `;
+
+        // Delete handler
+        const deleteBtn = div.querySelector('.delete-btn');
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showDeleteModal(prompt.id);
+        });
+
+        // Copy handler
+        div.addEventListener('click', (e) => {
+            if (!e.target.closest('.delete-btn')) {
+                copyPrompt(prompt.text, div);
+            }
+        });
+
+        // Keyboard support
+        div.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                copyPrompt(prompt.text, div);
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                showDeleteModal(prompt.id);
+            }
+        });
+
+        return div;
+    }
+
+    /**
+     * Copy prompt to clipboard
+     */
+    function copyPrompt(text, element) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Visual feedback
+            element.classList.add('copied');
+            const copyHint = element.querySelector('.copy-hint');
+            copyHint.textContent = 'Copied!';
+            copyHint.classList.add('success');
+
+            showToast('Prompt copied to clipboard');
+
+            // Reset after animation
+            setTimeout(() => {
+                element.classList.remove('copied');
+                copyHint.textContent = 'Click to copy';
+                copyHint.classList.remove('success');
+            }, 1500);
+        }).catch(() => {
+            showToast('Failed to copy', 'error');
+        });
+    }
+
+    /**
+     * Show toast notification
+     */
+    function showToast(message, type = 'success') {
+        elements.toast.textContent = message;
+        elements.toast.style.background = type === 'error' ? '#ef4444' : '#111827';
+        elements.toast.classList.add('show');
+
+        setTimeout(() => {
+            elements.toast.classList.remove('show');
+        }, 2000);
+    }
+
+    /**
+     * Focus search input
+     */
+    function focusSearchInput() {
+        requestAnimationFrame(() => {
+            elements.searchInput.focus();
+        });
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', init);
+})();
